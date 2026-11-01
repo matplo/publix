@@ -34,7 +34,7 @@ jobs:
         with:
           fetch-depth: 0   # full history so the index can show per-file commit dates
       - name: Build file index
-        run: python3 tools/build_index.py
+        run: tools/build_index.sh   # index-browser via pipx: refreshes the page's data, keeps its design
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact
