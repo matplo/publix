@@ -1,37 +1,1174 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>publix</title>
-    <style>
-      :root { --bg: #f7f8fb; --ink: #1a2433; --muted: #5d6b82; --line: #e3e7ef; --link: #2a5bd7; }
-      @media (prefers-color-scheme: dark) {
-        :root { --bg: #12161d; --ink: #e6e9ef; --muted: #8b96a8; --line: #252c38; --link: #7ea2ff; }
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>publix</title>
+<meta name="color-scheme" content="dark" />
+<meta name="description" content="Public artifacts — slides, documents, figures and media." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!--
+  publix file browser.
+  The data below (#publix-manifest) and the no-JS list (publix:static) are written by
+  tools/build_index.py — re-run it after adding files. Everything else here is hand-editable.
+-->
+<style>
+  :root {
+    --bg: #05070d;
+    --ink: #e8ecf4;
+    --muted: #97a3b8;
+    --faint: #5f6a82;
+    --line: rgba(148, 163, 184, .13);
+    --line2: rgba(148, 163, 184, .24);
+    --glass: rgba(9, 13, 25, .68);
+    --glass2: rgba(13, 19, 36, .88);
+    --accent: #7aa2ff;
+    --panel-w: 340px;
+    --sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg) radial-gradient(1200px 800px at 65% 35%, #0e1834 0%, transparent 62%);
+    color: var(--ink);
+    font: 14px/1.45 var(--sans);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; }
+
+  #scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; outline: none; touch-action: none; }
+  .css2d { position: fixed !important; inset: 0; pointer-events: none; z-index: 1; }
+
+  /* ---------- 3D folder labels ---------- */
+  .lbl { pointer-events: none; transition: opacity .3s; }
+  .lbl-in {
+    display: flex; align-items: center; gap: 7px;
+    transform: translateY(10px);
+    padding: 3px 9px 3px 9px; border-radius: 999px;
+    background: rgba(7, 11, 22, .66);
+    border: 1px solid color-mix(in srgb, var(--c) 42%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--c) 20%, transparent);
+    font: 500 12.5px/1.25 var(--sans); white-space: nowrap;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .lbl-ct { font: 500 11px var(--mono); color: var(--c); }
+  .lbl.root .lbl-in { font-size: 15px; font-weight: 600; padding: 5px 13px; transform: translateY(16px); }
+
+  /* ---------- side panel ---------- */
+  .panel {
+    position: fixed; z-index: 5; top: 16px; left: 16px; bottom: 16px; width: var(--panel-w);
+    display: flex; flex-direction: column;
+    background: var(--glass);
+    border: 1px solid var(--line); border-radius: 18px;
+    backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .04);
+    overflow: hidden;
+  }
+  .p-head { display: flex; gap: 12px; align-items: center; padding: 18px 18px 14px; }
+  .mark {
+    flex: none; position: relative; width: 34px; height: 34px; border-radius: 10px;
+    background: conic-gradient(from 210deg, #7aa2ff, #5eead4, #f0abfc, #fdba74, #7aa2ff);
+    box-shadow: 0 0 26px rgba(122, 162, 255, .45);
+  }
+  .mark::after { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: var(--bg); box-shadow: 0 0 0 2px rgba(255,255,255,.08); }
+  .p-title { min-width: 0; flex: 1; }
+  .p-title h1 { margin: 0; font-size: 20px; line-height: 1.15; font-weight: 700; letter-spacing: -.02em; }
+  .stats { margin: 3px 0 0; color: var(--muted); font: 11.5px/1.4 var(--mono); }
+  .p-toggle { display: none; flex: none; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line2); border-radius: 10px; background: none; cursor: pointer; }
+  .p-toggle svg { transition: transform .35s; }
+
+  .search { position: relative; margin: 0 14px; }
+  .search input {
+    width: 100%; height: 38px; padding: 0 40px 0 36px;
+    border-radius: 10px; border: 1px solid var(--line2);
+    background: rgba(255, 255, 255, .035); color: var(--ink);
+    font: 14px var(--sans); outline: none; transition: border-color .2s, box-shadow .2s;
+  }
+  .search input::placeholder { color: var(--faint); }
+  .search input:focus { border-color: color-mix(in srgb, var(--accent) 70%, transparent); box-shadow: 0 0 0 3px rgba(122, 162, 255, .16); }
+  .search input::-webkit-search-cancel-button { display: none; }
+  .search > svg { position: absolute; left: 12px; top: 12px; color: var(--faint); pointer-events: none; }
+  .search kbd { position: absolute; right: 10px; top: 10px; padding: 0 6px; border: 1px solid var(--line2); border-radius: 5px; font: 11px/16px var(--mono); color: var(--faint); }
+  .search input:focus ~ kbd, .search input:not(:placeholder-shown) ~ kbd { display: none; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
+    border: 1px solid var(--line2); border-radius: 999px; background: transparent;
+    color: var(--muted); font: 500 12px var(--sans); cursor: pointer; transition: opacity .2s, border-color .2s, background .2s;
+  }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
+  .chip .n { font: 11px var(--mono); color: var(--faint); }
+  .chip:hover { border-color: color-mix(in srgb, var(--c) 55%, transparent); }
+  .chip[aria-pressed="true"].solo { background: color-mix(in srgb, var(--c) 14%, transparent); border-color: color-mix(in srgb, var(--c) 50%, transparent); color: var(--ink); }
+  .chip[aria-pressed="false"] { opacity: .42; }
+  .chip[aria-pressed="false"]::before { box-shadow: none; }
+
+  .tree { flex: 1; overflow: auto; padding: 6px 8px 12px; border-top: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+  .row {
+    display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+    padding: 6px 8px; border: 0; border-radius: 8px; background: none;
+    color: var(--ink); text-align: left; text-decoration: none; cursor: pointer;
+    transition: background .15s;
+  }
+  .row:hover, .row.hot { background: rgba(122, 162, 255, .09); }
+  .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .chev { flex: none; display: grid; place-items: center; width: 14px; color: var(--faint); transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
+  .dir[aria-expanded="true"] .chev { transform: rotate(90deg); color: var(--muted); }
+  .ico { flex: none; display: grid; color: var(--c); }
+  .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir .nm { font-weight: 600; }
+  .meta { flex: none; font: 11px var(--mono); color: var(--faint); }
+  .pill {
+    flex: none; min-width: 40px; padding: 2px 5px; border-radius: 6px; text-align: center;
+    font: 600 9.5px/1.4 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+    color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+  }
+  .go { flex: none; display: grid; color: var(--muted); opacity: 0; transform: translate(-3px, 3px); transition: opacity .15s, transform .15s; }
+  .file:hover .go, .file.hot .go, .file:focus-visible .go { opacity: 1; transform: none; }
+
+  .kids { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s cubic-bezier(.2, .8, .2, 1); }
+  .kids.open { grid-template-rows: 1fr; }
+  .kids-in { min-height: 0; overflow: hidden; margin-left: 15px; padding-left: 6px; border-left: 1px solid var(--line); }
+  .kids .item { opacity: 0; transform: translateX(-6px); transition: opacity .3s, transform .35s cubic-bezier(.2, .8, .2, 1); }
+  .kids.open > .kids-in > .item { opacity: 1; transform: none; transition-delay: calc(var(--i, 0) * 22ms); }
+  .empty { padding: 18px 10px; color: var(--faint); font-style: italic; }
+
+  .p-foot { display: flex; justify-content: space-between; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); color: var(--faint); font: 11px var(--mono); }
+  .p-foot a { color: var(--muted); text-decoration: none; }
+  .p-foot a:hover { color: var(--ink); }
+
+  /* static (no-JS) list */
+  .static ul { list-style: none; margin: 0; padding-left: 14px; }
+  .static > ul { padding: 4px 4px; }
+  .static li { padding: 3px 0; }
+  .static a { color: #9ab8ff; text-decoration: none; }
+  .static strong { color: var(--muted); }
+
+  /* ---------- toolbar ---------- */
+  .toolbar {
+    position: fixed; z-index: 5; top: 16px; right: 16px; display: flex; gap: 2px; padding: 5px;
+    background: var(--glass); border: 1px solid var(--line); border-radius: 13px;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  }
+  .tb { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 9px; background: none; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+  .tb:hover { background: rgba(255, 255, 255, .06); color: var(--ink); }
+  .tb[aria-pressed="true"] { color: var(--accent); }
+  .tb:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* ---------- detail card ---------- */
+  .detail {
+    --c: var(--accent);
+    position: fixed; z-index: 6; right: 16px; bottom: 16px; width: 320px; padding: 14px;
+    background: var(--glass2);
+    border: 1px solid color-mix(in srgb, var(--c) 34%, var(--line)); border-radius: 16px;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .5), 0 0 44px color-mix(in srgb, var(--c) 12%, transparent);
+    transition: opacity .25s, transform .3s cubic-bezier(.2, .8, .2, 1);
+  }
+  .detail.off { opacity: 0; transform: translateY(10px); pointer-events: none; }
+  .d-thumb { display: block; width: 100%; height: 150px; object-fit: contain; margin-bottom: 12px; border-radius: 10px; background: #0a0f1c; }
+  .d-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .d-top .pill { min-width: 0; }
+  .d-kind { color: var(--muted); font-size: 12px; }
+  .d-x { margin-left: auto; width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 6px; background: none; color: var(--faint); cursor: pointer; }
+  .d-x:hover { color: var(--ink); background: rgba(255,255,255,.06); }
+  .d-name { font-weight: 600; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+  .d-sub { margin-top: 3px; color: var(--muted); font-size: 13px; line-height: 1.35; }
+  .d-path { margin-top: 6px; color: var(--faint); font: 11px/1.45 var(--mono); overflow-wrap: anywhere; }
+  .d-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; color: var(--muted); font: 11.5px var(--mono); }
+  .d-open {
+    display: flex; align-items: center; justify-content: center; gap: 8px; height: 36px; margin-top: 12px;
+    border-radius: 10px; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+    background: color-mix(in srgb, var(--c) 16%, transparent);
+    color: var(--ink); font-weight: 600; text-decoration: none; cursor: pointer; transition: background .15s;
+  }
+  .d-open:hover { background: color-mix(in srgb, var(--c) 28%, transparent); }
+
+  .hint {
+    position: fixed; z-index: 4; bottom: 22px; left: calc((100vw + var(--panel-w) + 32px) / 2); transform: translateX(-50%);
+    padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(7, 11, 22, .55); color: var(--faint); font: 11.5px var(--mono); white-space: nowrap;
+    transition: opacity 1.2s; pointer-events: none;
+  }
+  .hint.gone { opacity: 0; }
+
+  /* ---------- small screens: panel becomes a bottom sheet ---------- */
+  @media (max-width: 720px) {
+    .panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; height: min(64vh, 540px); transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
+    .panel.collapsed { transform: translateY(calc(100% - 68px)); }
+    .panel.collapsed .p-toggle svg { transform: rotate(180deg); }
+    .p-head { cursor: pointer; padding: 16px 14px 14px 16px; }
+    .p-toggle { display: grid; }
+    .toolbar { top: 8px; right: 8px; }
+    .detail { top: 60px; bottom: auto; left: 8px; right: 8px; width: auto; }
+    .d-thumb { height: 110px; }
+    .hint { display: none; }
+  }
+
+  /* ---------- no WebGL: just the list, centered ---------- */
+  body.flat { overflow: auto; }
+  body.flat #scene, body.flat .toolbar, body.flat .hint, body.flat .css2d { display: none; }
+  body.flat .panel { position: relative; inset: auto; width: min(720px, calc(100% - 32px)); height: auto; min-height: calc(100vh - 64px); margin: 32px auto; transform: none; }
+  body.flat .p-toggle { display: none; }
+  body.flat .detail { position: fixed; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+
+<aside class="panel" id="panel" aria-label="File browser">
+  <div class="p-head" id="pHead">
+    <div class="mark" aria-hidden="true"></div>
+    <div class="p-title">
+      <h1 id="title">publix</h1>
+      <p class="stats" id="stats"></p>
+    </div>
+    <button class="p-toggle" id="pToggle" type="button" aria-label="Toggle file list">
+      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 10 8 5.5l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="search">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10.5 10.5 3.2 3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <input id="q" type="search" placeholder="Search files" autocomplete="off" spellcheck="false" aria-label="Search files" />
+    <kbd>/</kbd>
+  </div>
+  <div class="chips" id="chips" role="group" aria-label="Filter by type"></div>
+  <nav class="tree" id="tree" aria-label="Files">
+    <noscript><div class="static"><!-- publix:static --><ul><li><strong>alice-logos/</strong><ul><li><a href="alice-logos/ALICE-NN.jpg" target="_blank" rel="noopener">ALICE-NN.jpg</a></li><li><a href="alice-logos/ALICE-NN.png" target="_blank" rel="noopener">ALICE-NN.png</a></li><li><a href="alice-logos/ALICE-whiteBG.png" target="_blank" rel="noopener">ALICE-whiteBG.png</a></li><li><a href="alice-logos/ALICE_logo_square.jpg" target="_blank" rel="noopener">ALICE_logo_square.jpg</a></li><li><a href="alice-logos/alice_morph_radial.gif" target="_blank" rel="noopener">alice_morph_radial.gif</a></li><li><a href="alice-logos/alice_morph_radial.mp4" target="_blank" rel="noopener">alice_morph_radial.mp4</a></li><li><a href="alice-logos/ALICElogoLarge.png" target="_blank" rel="noopener">ALICElogoLarge.png</a></li><li><a href="alice-logos/morph_a.mp4" target="_blank" rel="noopener">morph_a.mp4</a></li><li><a href="alice-logos/morph_once.mp4" target="_blank" rel="noopener">morph_once.mp4</a></li></ul></li><li><strong>alice-soft-days-oct2026/</strong><ul><li><a href="alice-soft-days-oct2026/Generative%20foundation%20models%20for%20ALICE%20workflows.html" target="_blank" rel="noopener">Generative foundation models for ALICE workflows.html</a></li><li><a href="alice-soft-days-oct2026/Generative%20foundation%20models%20for%20ALICE%20workflows.pdf" target="_blank" rel="noopener">Generative foundation models for ALICE workflows.pdf</a></li></ul></li></ul><!-- /publix:static --></div></noscript>
+  </nav>
+  <div class="p-foot"><span id="footL"></span><a href="https://github.com/matplo/publix" target="_blank" rel="noopener">source ↗</a></div>
+</aside>
+
+<div class="toolbar" id="toolbar" role="toolbar" aria-label="View">
+  <button class="tb" id="bExpand" type="button" title="Unfold everything" aria-label="Unfold everything">
+    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="2.2"/><path d="M10 2.5v3M10 14.5v3M2.5 10h3M14.5 10h3M4.7 4.7l2.1 2.1M13.2 13.2l2.1 2.1M4.7 15.3l2.1-2.1M13.2 6.8l2.1-2.1"/></svg>
+  </button>
+  <button class="tb" id="bCollapse" type="button" title="Fold everything" aria-label="Fold everything">
+    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="2.2"/><path d="M10 3v3l-1.5-1.5M10 6l1.5-1.5M10 17v-3l-1.5 1.5M10 14l1.5 1.5M3 10h3L4.5 8.5M6 10l-1.5 1.5M17 10h-3l1.5-1.5M14 10l1.5 1.5"/></svg>
+  </button>
+  <button class="tb" id="bRotate" type="button" title="Auto-rotate" aria-label="Auto-rotate" aria-pressed="true">
+    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10a6.5 6.5 0 1 1-2-4.7"/><path d="M15 2.5v3.2h-3.2"/></svg>
+  </button>
+  <button class="tb" id="bReset" type="button" title="Reset view" aria-label="Reset view">
+    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4"/><circle cx="10" cy="10" r="2.5"/></svg>
+  </button>
+</div>
+
+<div class="detail off" id="detail" aria-live="polite"></div>
+<div class="hint" id="hint">drag to orbit · scroll to zoom · click a folder to unfold · click a file to open</div>
+
+<script type="application/json" id="publix-manifest">{"title":"publix","root":{"type":"dir","name":"publix","path":"","children":[{"type":"dir","name":"alice-logos","path":"alice-logos","children":[{"type":"file","name":"ALICE-NN.jpg","path":"alice-logos/ALICE-NN.jpg","href":"alice-logos/ALICE-NN.jpg","ext":"jpg","kind":"image","size":392910,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"ALICE-NN.png","path":"alice-logos/ALICE-NN.png","href":"alice-logos/ALICE-NN.png","ext":"png","kind":"image","size":1658593,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"ALICE-whiteBG.png","path":"alice-logos/ALICE-whiteBG.png","href":"alice-logos/ALICE-whiteBG.png","ext":"png","kind":"image","size":1736432,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"ALICE_logo_square.jpg","path":"alice-logos/ALICE_logo_square.jpg","href":"alice-logos/ALICE_logo_square.jpg","ext":"jpg","kind":"image","size":339248,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"alice_morph_radial.gif","path":"alice-logos/alice_morph_radial.gif","href":"alice-logos/alice_morph_radial.gif","ext":"gif","kind":"image","size":4373513,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"alice_morph_radial.mp4","path":"alice-logos/alice_morph_radial.mp4","href":"alice-logos/alice_morph_radial.mp4","ext":"mp4","kind":"video","size":1336985,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"ALICElogoLarge.png","path":"alice-logos/ALICElogoLarge.png","href":"alice-logos/ALICElogoLarge.png","ext":"png","kind":"image","size":218208,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"morph_a.mp4","path":"alice-logos/morph_a.mp4","href":"alice-logos/morph_a.mp4","ext":"mp4","kind":"video","size":317058,"mtime":"2026-11-01T06:18:39Z"},{"type":"file","name":"morph_once.mp4","path":"alice-logos/morph_once.mp4","href":"alice-logos/morph_once.mp4","ext":"mp4","kind":"video","size":5755039,"mtime":"2026-11-01T06:18:39Z"}]},{"type":"dir","name":"alice-soft-days-oct2026","path":"alice-soft-days-oct2026","children":[{"type":"file","name":"Generative foundation models for ALICE workflows.html","path":"alice-soft-days-oct2026/Generative foundation models for ALICE workflows.html","href":"alice-soft-days-oct2026/Generative%20foundation%20models%20for%20ALICE%20workflows.html","ext":"html","kind":"html","size":12026707,"mtime":"2026-11-01T06:18:39Z","title":"Generative foundation models for ALICE workflows"},{"type":"file","name":"Generative foundation models for ALICE workflows.pdf","path":"alice-soft-days-oct2026/Generative foundation models for ALICE workflows.pdf","href":"alice-soft-days-oct2026/Generative%20foundation%20models%20for%20ALICE%20workflows.pdf","ext":"pdf","kind":"pdf","size":7935242,"mtime":"2026-11-01T06:18:39Z"}]}]}}</script>
+
+<script type="module">
+/* =====================================================================
+   Data
+   ===================================================================== */
+const $ = (s, el = document) => el.querySelector(s);
+const manifest = (() => { try { return JSON.parse($('#publix-manifest').textContent) || {}; } catch { return {}; } })();
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const narrow = () => innerWidth <= 720;
+const coarse = matchMedia('(pointer: coarse)').matches;
+
+const KIND = {
+  html:  { label: 'HTML',  color: '#4cc9f0' },
+  pdf:   { label: 'PDF',   color: '#ff7b7b' },
+  image: { label: 'Image', color: '#ffd166' },
+  video: { label: 'Video', color: '#c4a1ff' },
+  audio: { label: 'Audio', color: '#5eead4' },
+  text:  { label: 'Text',  color: '#a9b6cc' },
+  other: { label: 'Other', color: '#8a94a8' },
+};
+const HUES = ['#7aa2ff', '#5eead4', '#f0abfc', '#fdba74', '#a3e635', '#67e8f9', '#fda4af', '#c4b5fd'];
+
+const root = manifest.root || { type: 'dir', name: '', path: '', children: [] };
+root.name = manifest.title || root.name || 'publix';
+const nodes = [], dirs = [], byPath = new Map();
+
+(function prep(n, parent, depth, hue) {
+  n.id = nodes.length; nodes.push(n);
+  n.parent = parent; n.depth = depth;
+  byPath.set(n.path, n);
+  if (n.type === 'dir') {
+    dirs.push(n);
+    n.children = n.children || [];
+    n.expanded = depth === 0;
+    n.color = depth === 0 ? '#d4e4ff' : hue;
+    let di = 0;
+    n.children.forEach(c => prep(c, n, depth + 1, depth === 0 ? HUES[(c.type === 'dir' ? di++ : 0) % HUES.length] : hue));
+    n.fileCount = 0; n.size = 0; n.mtime = '';
+    for (const c of n.children) {
+      n.fileCount += c.type === 'dir' ? c.fileCount : 1;
+      n.size += c.size || 0;
+      if ((c.mtime || '') > n.mtime) n.mtime = c.mtime;
+    }
+  } else {
+    n.kind = KIND[n.kind] ? n.kind : 'other';
+    n.color = KIND[n.kind].color;
+  }
+})(root, null, 0, HUES[0]);
+
+// A lone top-level folder opens straight away.
+if (root.children.length === 1 && root.children[0].type === 'dir') root.children[0].expanded = true;
+
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const fmtSize = b => {
+  if (!b) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(u.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
+  const v = b / 1024 ** i;
+  return `${v.toFixed(i && v < 10 ? 1 : 0)} ${u[i]}`;
+};
+const fmtDate = s => {
+  const d = new Date(s);
+  return s && !isNaN(d) ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+};
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+const ICON = {
+  chev: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  folder: '<svg viewBox="0 0 20 20" width="16" height="16"><path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.6l1.8 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  go: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  x: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+};
+
+/* =====================================================================
+   Panel: header, tree, filters, detail card
+   ===================================================================== */
+document.title = root.name;
+$('#title').textContent = root.name;
+$('#stats').textContent = [plural(root.fileCount, 'file'), plural(dirs.length - 1, 'folder'), fmtSize(root.size)].join(' · ');
+$('#footL').textContent = root.mtime ? `updated ${fmtDate(root.mtime)}` : '';
+if (coarse) $('#hint').textContent = 'drag to orbit · pinch to zoom · tap a folder to unfold';
+
+let view = null;          // the 3D view, once it is up
+let hot = null;           // node under the pointer (list or scene)
+let shown = null;         // node in the detail card
+
+const treeEl = $('#tree');
+function buildRow(n, i) {
+  const wrap = el('div', 'item'); wrap.style.setProperty('--i', Math.min(i, 14));
+  n.el = wrap;
+  let row;
+  if (n.type === 'dir') {
+    row = el('button', 'row dir'); row.type = 'button';
+    row.innerHTML = `<span class="chev">${ICON.chev}</span><span class="ico">${ICON.folder}</span>`;
+    row.append(el('span', 'nm', n.name), el('span', 'meta', n.fileCount));
+    row.addEventListener('click', () => toggle(n));
+    const kids = el('div', 'kids'), inner = el('div', 'kids-in');
+    n.children.forEach((c, j) => inner.appendChild(buildRow(c, j)));
+    kids.appendChild(inner);
+    wrap.append(row, kids);
+    n.kids = kids;
+  } else {
+    row = el('a', 'row file');
+    row.href = n.href; row.target = '_blank'; row.rel = 'noopener';
+    row.append(el('span', 'pill', (n.ext || 'file').slice(0, 4)), el('span', 'nm', n.name), el('span', 'meta', fmtSize(n.size)));
+    row.insertAdjacentHTML('beforeend', `<span class="go">${ICON.go}</span>`);
+    if (n.title && n.title !== n.name) row.title = n.title;
+    wrap.append(row);
+  }
+  row.style.setProperty('--c', n.color);
+  row.addEventListener('mouseenter', () => setHot(n));
+  row.addEventListener('mouseleave', () => setHot(null));
+  row.addEventListener('focus', () => { setHot(n); showDetail(n); });
+  n.row = row;
+  syncRow(n);
+  return wrap;
+}
+root.children.forEach((c, i) => treeEl.appendChild(buildRow(c, i)));
+const emptyEl = el('div', 'empty', root.children.length ? 'No matching files.' : 'Nothing here yet.');
+emptyEl.hidden = root.children.length > 0;
+treeEl.appendChild(emptyEl);
+
+function syncRow(n) {
+  if (n.type !== 'dir' || !n.row) return;
+  n.row.setAttribute('aria-expanded', n.expanded);
+  n.kids.classList.toggle('open', n.expanded);
+  n.kids.inert = !n.expanded;
+}
+
+/* ---- expand / collapse (shared by list and scene) ---- */
+function setExpanded(n, v, anchor = n) {
+  if (n.type !== 'dir' || n === root || n.expanded === v) return;
+  n.expanded = v;
+  syncRow(n);
+  setHash(v ? n : n.parent);
+  view?.relayout(anchor);
+  if (shown === n) { shown = null; showDetail(n); }
+}
+function toggle(n) {
+  if (n === root) return collapseAll();
+  setExpanded(n, !n.expanded);
+  dismissHint();
+}
+function expandAll() { dirs.forEach(d => { d.expanded = true; syncRow(d); }); view?.relayout(); }
+function collapseAll() { dirs.forEach(d => { d.expanded = d === root; syncRow(d); }); setHash(root); view?.relayout(); }
+function reveal(n) { for (let p = n.parent; p && p !== root; p = p.parent) { p.expanded = true; syncRow(p); } }
+
+function setHash(n) {
+  const url = n && n !== root ? '#' + encodeURI(n.path) : location.pathname + location.search;
+  history.replaceState(null, '', url);
+}
+
+/* ---- hover + detail card ---- */
+function setHot(n) {
+  if (hot === n) return;
+  hot?.row?.classList.remove('hot');
+  hot = n;
+  hot?.row?.classList.add('hot');
+  view?.setHover(n);
+  if (n && !coarse) showDetail(n);
+}
+
+const detail = $('#detail');
+function showDetail(n) {
+  if (!n) return hideDetail();
+  if (shown === n && !detail.classList.contains('off')) return;
+  shown = n;
+  detail.style.setProperty('--c', n.color);
+  detail.replaceChildren();
+  if (n.type === 'file' && n.kind === 'image') {
+    const img = el('img', 'd-thumb'); img.src = n.href; img.alt = ''; img.decoding = 'async';
+    detail.append(img);
+  }
+  const top = el('div', 'd-top');
+  const pill = el('span', 'pill', n.type === 'dir' ? 'dir' : (n.ext || 'file').slice(0, 4));
+  pill.style.setProperty('--c', n.color);
+  const close = el('button', 'd-x'); close.type = 'button'; close.setAttribute('aria-label', 'Close'); close.innerHTML = ICON.x;
+  close.addEventListener('click', hideDetail);
+  top.append(pill, el('span', 'd-kind', n.type === 'dir' ? (n === root ? 'Collection' : 'Folder') : KIND[n.kind].label), close);
+  detail.append(top, el('div', 'd-name', n.name));
+  if (n.title && n.title !== n.name) detail.append(el('div', 'd-sub', n.title));
+  if (n.path) detail.append(el('div', 'd-path', n.path + (n.type === 'dir' ? '/' : '')));
+  const meta = el('div', 'd-meta');
+  if (n.type === 'dir') meta.append(el('span', '', plural(n.fileCount, 'file')));
+  meta.append(el('span', '', fmtSize(n.size)), el('span', '', fmtDate(n.mtime)));
+  detail.append(meta);
+  if (n.type === 'file') {
+    const a = el('a', 'd-open'); a.href = n.href; a.target = '_blank'; a.rel = 'noopener';
+    a.append('Open in new tab'); a.insertAdjacentHTML('beforeend', ICON.go);
+    detail.append(a);
+  } else {
+    const b = el('button', 'd-open', n === root ? 'Fold everything' : n.expanded ? 'Fold folder' : 'Unfold folder');
+    b.type = 'button'; b.style.width = '100%';
+    b.addEventListener('click', () => toggle(n));
+    detail.append(b);
+  }
+  detail.classList.remove('off');
+}
+function hideDetail() { detail.classList.add('off'); shown = null; }
+
+/* ---- search + type filters ---- */
+const qEl = $('#q');
+const counts = {};
+nodes.forEach(n => { if (n.type === 'file') counts[n.kind] = (counts[n.kind] || 0) + 1; });
+const present = Object.keys(KIND).filter(k => counts[k]);
+const filter = { q: '', kinds: new Set(present) };
+let snapshot = null;   // expansion state from before a filter was applied
+
+const chipsEl = $('#chips');
+chipsEl.hidden = present.length < 2;
+const chips = present.map(k => {
+  const b = el('button', 'chip'); b.type = 'button';
+  b.style.setProperty('--c', KIND[k].color);
+  b.append(KIND[k].label, el('span', 'n', counts[k]));
+  b.addEventListener('click', () => {
+    const all = filter.kinds.size === present.length;
+    if (all) filter.kinds = new Set([k]);                       // first click: show only this type
+    else if (filter.kinds.has(k)) filter.kinds.delete(k);
+    else filter.kinds.add(k);
+    if (!filter.kinds.size) filter.kinds = new Set(present);     // nothing left: back to all
+    applyFilter();
+  });
+  return [k, b];
+});
+chips.forEach(([, b]) => chipsEl.appendChild(b));
+
+const filtering = () => !!filter.q || filter.kinds.size < present.length;
+function applyFilter() {
+  const on = filtering();
+  chips.forEach(([k, b]) => { b.setAttribute('aria-pressed', filter.kinds.has(k)); b.classList.toggle('solo', filter.kinds.size < present.length); });
+  const q = filter.q;
+  (function mark(n) {
+    if (n.type === 'file') {
+      n.match = filter.kinds.has(n.kind) && (!q || `${n.path} ${n.title || ''}`.toLowerCase().includes(q));
+      return n.match;
+    }
+    let any = false;
+    for (const c of n.children) if (mark(c)) any = true;
+    return (n.match = any);
+  })(root);
+
+  if (on && !snapshot) snapshot = new Map(dirs.map(d => [d, d.expanded]));
+  if (on) dirs.forEach(d => { d.expanded = d === root || d.match; });
+  else if (snapshot) { snapshot.forEach((v, d) => { d.expanded = v; }); snapshot = null; }
+  dirs.forEach(syncRow);
+  nodes.forEach(n => { if (n.el) n.el.hidden = on && !n.match; });
+  emptyEl.hidden = on ? root.match : root.children.length > 0;
+  view?.relayout();
+}
+applyFilter();
+qEl.addEventListener('input', () => { filter.q = qEl.value.trim().toLowerCase(); applyFilter(); });
+qEl.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { qEl.value = ''; filter.q = ''; applyFilter(); qEl.blur(); }
+  if (e.key === 'Enter') {               // open the only match
+    const hits = nodes.filter(n => n.type === 'file' && n.match);
+    if (filter.q && hits.length === 1) window.open(hits[0].href, '_blank', 'noopener');
+  }
+});
+addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea')) return;
+  if (e.key === '/') { e.preventDefault(); if (narrow()) panel.classList.remove('collapsed'); qEl.focus(); }
+  else if (e.key === 'Escape') hideDetail();
+});
+
+/* ---- toolbar, mobile sheet, hint ---- */
+const panel = $('#panel');
+if (narrow()) panel.classList.add('collapsed');
+$('#pHead').addEventListener('click', () => { if (narrow()) panel.classList.toggle('collapsed'); });
+$('#bExpand').addEventListener('click', expandAll);
+$('#bCollapse').addEventListener('click', collapseAll);
+$('#bReset').addEventListener('click', () => view?.resetView());
+const bRotate = $('#bRotate');
+bRotate.setAttribute('aria-pressed', String(!reduceMotion));
+bRotate.addEventListener('click', () => {
+  const on = bRotate.getAttribute('aria-pressed') !== 'true';
+  bRotate.setAttribute('aria-pressed', on);
+  view?.setAutoRotate(on);
+});
+const hint = $('#hint');
+function dismissHint() { hint.classList.add('gone'); }
+setTimeout(dismissHint, 14000);
+
+/* ---- deep link: #path/to/folder or #path/to/file ---- */
+(function fromHash() {
+  const p = decodeURI(location.hash.slice(1));
+  const n = p && byPath.get(p);
+  if (!n) return;
+  reveal(n);
+  if (n.type === 'dir') { n.expanded = true; syncRow(n); }
+  else showDetail(n);
+  requestAnimationFrame(() => n.row?.scrollIntoView({ block: 'center' }));
+})();
+
+/* =====================================================================
+   3D view
+   ===================================================================== */
+async function initView() {
+  const [THREE, { OrbitControls }, { CSS2DRenderer, CSS2DObject }, { EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] =
+    await Promise.all([
+      import('three'),
+      import('three/addons/controls/OrbitControls.js'),
+      import('three/addons/renderers/CSS2DRenderer.js'),
+      import('three/addons/postprocessing/EffectComposer.js'),
+      import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/UnrealBloomPass.js'),
+      import('three/addons/postprocessing/OutputPass.js'),
+    ]);
+  await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]);
+
+  const SANS = '"Space Grotesk", system-ui, sans-serif';
+  const MONO = '"JetBrains Mono", ui-monospace, monospace';
+  const BG = 0x05070d;
+  const DUR = reduceMotion ? 0 : 1100;
+  const RING = 6.2;        // radial distance between tree levels
+  const SPACING = 4.1;     // minimum arc length between neighbouring nodes
+  const CARD_W = 3.3;
+  const TAU = Math.PI * 2;
+
+  /* ---- renderer, camera, controls ---- */
+  const canvas = $('#scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, narrow() ? 1.5 : 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.NeutralToneMapping;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(BG);
+  scene.fog = new THREE.Fog(BG, 30, 120);
+
+  const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 3000);
+  const ELEV = 0.92;  // ~53° above the plane
+  camera.position.set(0, Math.sin(ELEV) * 40, Math.cos(ELEV) * 40);
+
+  const controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.minDistance = 4;
+  controls.maxDistance = 400;
+  controls.maxPolarAngle = Math.PI * 0.47;
+  controls.autoRotateSpeed = 0.35;
+  let autoRotate = !reduceMotion;
+
+  const labels = new CSS2DRenderer();
+  labels.setSize(innerWidth, innerHeight);
+  labels.domElement.className = 'css2d';
+  canvas.after(labels.domElement);
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.4, 0.9);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
+  scene.add(new THREE.HemisphereLight(0x9bb8ff, 0x0b0b18, 1.4));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(6, 14, 8); scene.add(sun);
+
+  /* ---- shared textures ---- */
+  const tex2d = (w, h, draw) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    draw(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  };
+  const dot = tex2d(64, 64, (x) => {
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.22, 'rgba(255,255,255,.75)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  });
+  const glow = (color) => tex2d(256, 256, (x) => {
+    const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, color); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  });
+
+  /* ---- backdrop: stars, nebulae, floor glow ---- */
+  {
+    const N = 1800, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+    const tints = [new THREE.Color('#ffffff'), new THREE.Color('#9ab8ff'), new THREE.Color('#f0abfc'), new THREE.Color('#5eead4')];
+    for (let i = 0; i < N; i++) {
+      const v = new THREE.Vector3().randomDirection().multiplyScalar(320 + Math.random() * 380);
+      v.y = Math.abs(v.y) * 0.9 - 40;
+      pos.set([v.x, v.y, v.z], i * 3);
+      const c = tints[Math.random() < 0.7 ? 0 : 1 + (Math.random() * 3 | 0)].clone().multiplyScalar(0.35 + Math.random() * 0.65);
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    var stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, map: dot, vertexColors: true, transparent: true, depthWrite: false, fog: false }));
+    scene.add(stars);
+    [['rgba(90,110,255,.55)', [-260, 60, -380], 520], ['rgba(240,120,220,.35)', [320, 20, -260], 420], ['rgba(60,220,200,.28)', [80, -60, 380], 460]]
+      .forEach(([c, p, s]) => {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow(c), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, opacity: .5 }));
+        sp.position.set(...p); sp.scale.setScalar(s); stars.add(sp);
+      });
+  }
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
+    map: glow('rgba(110,140,255,.32)'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.9; floor.userData.s = 30;
+  scene.add(floor);
+
+  // Concentric guide rings, one per visible depth.
+  const ringGeo = new THREE.BufferGeometry().setFromPoints(
+    Array.from({ length: 161 }, (_, i) => new THREE.Vector3(Math.cos(i / 160 * TAU), 0, Math.sin(i / 160 * TAU))));
+  const rings = [];
+  const ringAt = d => {
+    while (rings.length <= d) {
+      const m = new THREE.Line(ringGeo, new THREE.LineBasicMaterial({ color: 0x7aa2ff, transparent: true, opacity: 0, depthWrite: false }));
+      m.position.y = -0.85; m.userData = { r: 0.01, rT: 0.01, o: 0, oT: 0 }; scene.add(m); rings.push(m);
+    }
+    return rings[d];
+  };
+
+  /* ---- node objects ---- */
+  const world = new THREE.Group(); scene.add(world);
+  const sphereGeo = new THREE.SphereGeometry(1, 48, 24);
+  const shellGeo = new THREE.IcosahedronGeometry(1, 1);
+  const torusGeo = new THREE.TorusGeometry(1, 0.018, 8, 120);
+  const pickables = [];
+
+  function makeDir(n) {
+    const g = new THREE.Group();
+    const col = new THREE.Color(n.color);
+    const isRoot = n === root;
+    const rad = isRoot ? 1.05 : 0.42 + 0.075 * Math.log2(1 + n.fileCount);
+    const core = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({
+      color: col, emissive: col, emissiveIntensity: isRoot ? 0.75 : 0.85, roughness: 0.3, metalness: 0.15, transparent: true,
+    }));
+    core.scale.setScalar(rad);
+    const shell = new THREE.Mesh(shellGeo, new THREE.MeshBasicMaterial({ color: col, wireframe: true, transparent: true, opacity: 0.3, depthWrite: false }));
+    shell.scale.setScalar(rad * 1.6);
+    const ring = new THREE.Mesh(torusGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false }));
+    ring.scale.setScalar(rad * 2.2);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot, color: col, transparent: true, opacity: isRoot ? .22 : .2, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(rad * 5.5);
+    g.add(halo, core, shell, ring);
+    if (isRoot) {
+      const ring2 = ring.clone(); ring2.material = ring.material.clone(); ring2.scale.setScalar(rad * 2.9);
+      g.add(ring2); n.ring2 = ring2;
+    }
+    shell.userData.node = n;               // the shell is the (larger) hit target
+    pickables.push(shell);
+
+    const lbl = el('div', 'lbl' + (isRoot ? ' root' : ''));
+    lbl.style.setProperty('--c', n.color);
+    const inner = el('div', 'lbl-in');
+    inner.append(el('span', 'lbl-nm', n.name));
+    if (!isRoot) inner.append(el('span', 'lbl-ct', n.fileCount));
+    lbl.append(inner);
+    const label = new CSS2DObject(lbl);
+    label.position.set(0, -rad * 1.75, 0);
+    label.center.set(0.5, 0);
+    g.add(label);
+
+    Object.assign(n, { core, shell, ring, halo, label, rad, ringO: 0 });
+    return g;
+  }
+
+  /* file cards are canvas textures on camera-facing sprites */
+  const CW = 512, CH = 424;
+  const hexA = (hex, a) => {
+    const v = parseInt(hex.slice(1), 16);
+    return `rgba(${v >> 16 & 255},${v >> 8 & 255},${v & 255},${a})`;
+  };
+  function rr(x, X, Y, W, H, R) {
+    x.beginPath();
+    x.moveTo(X + R, Y); x.arcTo(X + W, Y, X + W, Y + H, R); x.arcTo(X + W, Y + H, X, Y + H, R);
+    x.arcTo(X, Y + H, X, Y, R); x.arcTo(X, Y, X + W, Y, R); x.closePath();
+  }
+  function wrapText(x, text, maxW, maxLines) {
+    const lines = []; let rest = String(text).trim();
+    while (rest && lines.length < maxLines) {
+      if (x.measureText(rest).width <= maxW) { lines.push(rest); rest = ''; break; }
+      let lo = 1, hi = rest.length;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (x.measureText(rest.slice(0, mid)).width <= maxW) lo = mid; else hi = mid - 1; }
+      let cut = lo;
+      const brk = Math.max(rest.lastIndexOf(' ', cut), rest.lastIndexOf('_', cut - 1), rest.lastIndexOf('-', cut - 1), rest.lastIndexOf('.', cut - 1));
+      if (brk > cut * 0.45) cut = brk + 1;
+      lines.push(rest.slice(0, cut).trim()); rest = rest.slice(cut).trim();
+    }
+    if (rest && lines.length) {
+      let last = lines[lines.length - 1];
+      while (last.length > 1 && x.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+      lines[lines.length - 1] = last.trimEnd() + '…';
+    }
+    return lines;
+  }
+  function drawGlyph(n, x, X, Y, W, H) {
+    const c = n.color, cx = X + W / 2, cy = Y + H / 2;
+    const g = x.createRadialGradient(cx, cy, 8, cx, cy, W * 0.62);
+    g.addColorStop(0, hexA(c, 0.22)); g.addColorStop(1, hexA(c, 0));
+    x.fillStyle = g; x.fillRect(X, Y, W, H);
+    if (n.kind === 'html' && n.title) {
+      x.fillStyle = hexA(c, 0.95); x.font = `600 22px ${MONO}`; x.textBaseline = 'top';
+      x.fillText('</>', X + 22, Y + 20);
+      x.fillStyle = '#e6ebf5'; x.font = `600 33px ${SANS}`; x.textBaseline = 'alphabetic';
+      const lines = wrapText(x, n.title, W - 44, 4);
+      const top = Y + 62 + (4 - lines.length) * 20 + 30;
+      lines.forEach((l, i) => x.fillText(l, X + 22, top + i * 41));
+      return;
+    }
+    const dw = 116, dh = 146, dx = cx - dw / 2, dy = cy - dh / 2 - 4, f = 32;
+    x.beginPath();
+    x.moveTo(dx + 10, dy); x.lineTo(dx + dw - f, dy); x.lineTo(dx + dw, dy + f); x.lineTo(dx + dw, dy + dh - 10);
+    x.quadraticCurveTo(dx + dw, dy + dh, dx + dw - 10, dy + dh); x.lineTo(dx + 10, dy + dh);
+    x.quadraticCurveTo(dx, dy + dh, dx, dy + dh - 10); x.lineTo(dx, dy + 10); x.quadraticCurveTo(dx, dy, dx + 10, dy);
+    x.fillStyle = hexA(c, 0.12); x.fill();
+    x.lineWidth = 5; x.lineJoin = 'round'; x.strokeStyle = hexA(c, 0.95); x.stroke();
+    x.beginPath(); x.moveTo(dx + dw - f, dy); x.lineTo(dx + dw - f, dy + f); x.lineTo(dx + dw, dy + f); x.stroke();
+    x.fillStyle = c; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const tag = n.kind === 'html' ? '</>' : (n.ext || '?').toUpperCase().slice(0, 4);
+    x.font = `700 ${tag.length > 3 ? 26 : 30}px ${MONO}`;
+    x.fillText(tag, cx, dy + dh * 0.62);
+    x.textAlign = 'left';
+  }
+  function drawCard(n, x, media) {
+    const c = n.color;
+    x.clearRect(0, 0, CW, CH);
+    rr(x, 4, 4, CW - 8, CH - 8, 30);
+    const bg = x.createLinearGradient(0, 0, 0, CH);
+    bg.addColorStop(0, 'rgba(24,32,56,0.97)'); bg.addColorStop(1, 'rgba(9,13,25,0.97)');
+    x.fillStyle = bg; x.fill();
+    x.lineWidth = 4; x.strokeStyle = hexA(c, 0.8); x.stroke();
+
+    const X = 22, Y = 22, W = CW - 44, H = 252;
+    x.save(); rr(x, X, Y, W, H, 18); x.clip();
+    x.fillStyle = hexA(c, 0.07); x.fillRect(X, Y, W, H);
+    if (media) {
+      const iw = media.videoWidth || media.naturalWidth || 300, ih = media.videoHeight || media.naturalHeight || 150;
+      const s = Math.min(W / iw, H / ih), w = iw * s, h = ih * s;
+      x.fillStyle = '#0a0f1c'; x.fillRect(X, Y, W, H);
+      x.drawImage(media, X + (W - w) / 2, Y + (H - h) / 2, w, h);
+    } else drawGlyph(n, x, X, Y, W, H);
+    x.restore();
+    if (n.kind === 'video') {
+      const cx = X + W / 2, cy = Y + H / 2;
+      x.beginPath(); x.arc(cx, cy, 34, 0, TAU); x.fillStyle = 'rgba(6,9,18,.62)'; x.fill();
+      x.lineWidth = 3; x.strokeStyle = hexA(c, .9); x.stroke();
+      x.beginPath(); x.moveTo(cx - 10, cy - 15); x.lineTo(cx + 16, cy); x.lineTo(cx - 10, cy + 15); x.closePath(); x.fillStyle = '#e6ebf5'; x.fill();
+    }
+    const tag = (n.ext || 'file').toUpperCase().slice(0, 5);
+    x.font = `600 21px ${MONO}`; x.textBaseline = 'middle';
+    const pw = x.measureText(tag).width + 26;
+    rr(x, 24, 294, pw, 34, 9); x.fillStyle = hexA(c, 0.16); x.fill(); x.lineWidth = 2; x.strokeStyle = hexA(c, 0.4); x.stroke();
+    x.fillStyle = c; x.fillText(tag, 37, 312);
+    x.fillStyle = '#8d97ab'; x.font = `500 21px ${MONO}`; x.fillText(fmtSize(n.size), 24 + pw + 14, 312);
+    x.fillStyle = '#e3e8f2'; x.font = `600 27px ${SANS}`; x.textBaseline = 'alphabetic';
+    wrapText(x, n.name, CW - 48, 2).forEach((l, i) => x.fillText(l, 24, 366 + i * 33));
+  }
+
+  function makeFile(n) {
+    const c = document.createElement('canvas'); c.width = CW; c.height = CH;
+    const x = c.getContext('2d');
+    drawCard(n, x, null);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xdcdcdc /* keeps white images under the bloom threshold */, transparent: true, depthWrite: false }));
+    sprite.scale.set(CARD_W, CARD_W * CH / CW, 1);
+    sprite.userData.node = n;
+    pickables.push(sprite);
+    const g = new THREE.Group(); g.add(sprite);
+    n.sprite = sprite;
+
+    const redraw = media => { drawCard(n, x, media); tex.needsUpdate = true; };
+    if (n.kind === 'image') {
+      const img = new Image(); img.decoding = 'async';
+      img.onload = () => redraw(img);
+      img.src = n.href;
+    } else if (n.kind === 'video') {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.addEventListener('loadeddata', () => { v.currentTime = Math.min(1, (v.duration || 2) * 0.25); }, { once: true });
+      v.addEventListener('seeked', () => { redraw(v); v.removeAttribute('src'); v.load(); }, { once: true });
+      v.src = n.href;
+    }
+    return g;
+  }
+
+  function ensureObj(n) {
+    if (n.obj) return n.obj;
+    n.obj = n.type === 'dir' ? makeDir(n) : makeFile(n);
+    n.obj.visible = false;
+    Object.assign(n, { a: 0, r: 0, y: 0, s: 0, hs: 1, al: 1, alT: 1, shown: false, hiding: false, tw: null, col: new THREE.Color(n.color) });
+    world.add(n.obj);
+    return n.obj;
+  }
+
+  /* ---- radial tree layout ----
+     Every visible leaf gets an equal share of the circle; folders sit at the centre of
+     their leaves' wedge. Ring radii grow when a level gets crowded. Positions are kept
+     in polar form (angle, radius) and tweened that way, so unfolding sweeps around the
+     centre instead of cutting across it. */
+  let angleOffset = -Math.PI / 2;
+  let fitDist = 30, fitting = true, fitTarget = null;
+
+  function relayout(anchor) {
+    const visible = [];
+    (function walk(n) { visible.push(n); if (n.type === 'dir' && n.expanded) n.children.forEach(walk); })(root);
+    (function leaves(n) {
+      n._lv = n.type === 'dir' && n.expanded && n.children.length ? n.children.reduce((s, c) => s + leaves(c), 0) : 1;
+      return n._lv;
+    })(root);
+    const L = root._lv;
+    const minLv = [];
+    for (const n of visible) if (n.depth) minLv[n.depth] = Math.min(minLv[n.depth] ?? Infinity, n._lv);
+    const radii = [0];
+    for (let d = 1; d < minLv.length; d++)
+      radii[d] = Math.max(radii[d - 1] + (d === 1 ? RING : RING * 0.82), SPACING * L / (TAU * minLv[d]));
+
+    const target = new Map();
+    (function place(n, a0, a1) {
+      target.set(n, { a: (a0 + a1) / 2, r: radii[n.depth] || 0 });
+      if (n.type === 'dir' && n.expanded) {
+        let a = a0;
+        for (const c of n.children) { const w = (a1 - a0) * c._lv / n._lv; place(c, a, a + w); a += w; }
       }
-      * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--ink);
-             font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-      main { width: min(760px, calc(100% - 32px)); margin: 48px auto; }
-      h1 { margin: 0 0 4px; font-size: 1.6rem; letter-spacing: -0.02em; }
-      p.sub { margin: 0 0 32px; color: var(--muted); }
-      ul { list-style: none; padding: 0; margin: 0; }
-      li { padding: 12px 0; border-top: 1px solid var(--line); }
-      li:last-child { border-bottom: 1px solid var(--line); }
-      a { color: var(--link); text-decoration: none; font-weight: 600; }
-      a:hover { text-decoration: underline; }
-      .desc { color: var(--muted); font-size: 0.92rem; }
-      .empty { color: var(--muted); font-style: italic; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>publix</h1>
-      <p class="sub">Public artifacts.</p>
-      <ul>
-        <!-- <li><a href="example.html">example</a> <span class="desc">— short description</span></li> -->
-        <li class="empty">Nothing here yet.</li>
-      </ul>
-    </main>
-  </body>
+    })(root, 0, TAU);
+
+    // Keep the folder that was just clicked where it is; everything else swings around it.
+    if (anchor && anchor !== root && anchor.shown && target.has(anchor))
+      angleOffset = (anchor.tw ? anchor.tw.a1 : anchor.a) - target.get(anchor).a;
+    for (const t of target.values()) t.a += angleOffset;
+    target.get(root).a = 0;
+
+    const now = performance.now();
+    let k = 0;
+    for (const n of nodes) {                     // pre-order: parents before children
+      const t = target.get(n);
+      if (t) {
+        ensureObj(n);
+        let arc = 0;
+        if (!n.shown) {                          // appearing: start inside the parent
+          const p = n.parent || n;
+          n.r = p.r || 0; n.a = p.r > 0.01 ? p.a : t.a; n.s = 0;
+          n.shown = true; n.obj.visible = true; arc = 1.5;
+          tween(n, t.a, t.r, 1, now + Math.min(k++ * 28, 480), arc);
+        } else {
+          tween(n, t.a, t.r, 1, now, 0);
+        }
+        n.hiding = false;
+      } else if (n.shown) {                      // disappearing: fold back into nearest visible ancestor
+        let p = n.parent; while (p && !target.has(p)) p = p.parent;
+        const pt = target.get(p);
+        if (!n.hiding || n.tw?.a1 !== pt.a) { n.hiding = true; tween(n, pt.a, pt.r, 0, now, 0.6); }
+      }
+    }
+    refreshAlpha();
+
+    rings.forEach(r => { r.userData.oT = 0; });
+    for (let d = 1; d < radii.length; d++) { const r = ringAt(d); r.userData.rT = radii[d]; r.userData.oT = 0.11; }
+    const maxR = radii[radii.length - 1] || 0;
+    floor.userData.s = Math.max(30, maxR * 3);
+    fitDist = fitFor(maxR);
+    fitting = true;
+  }
+
+  function tween(n, a, r, s, t0, arc) {
+    let d = (a - n.a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU;
+    n.tw = { a0: n.a, r0: n.r, s0: n.s, a1: n.a + d, r1: r, s1: s, t0, arc };
+  }
+
+  function refreshAlpha() {
+    const on = filtering();
+    for (const n of nodes) if (n.obj) n.alT = !on || n === root || n.match ? 1 : 0.13;
+  }
+
+  function fitFor(maxR) {
+    const vfov = THREE.MathUtils.degToRad(camera.fov);
+    const sideW = narrow() ? 0 : panel.offsetWidth + 32;
+    const aspect = Math.max(0.4, (innerWidth - sideW) / innerHeight);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
+    const half = Math.min(vfov, hfov) / 2;
+    return THREE.MathUtils.clamp((maxR + CARD_W * 1.3) / Math.sin(half) * 0.8, 24, 380);
+  }
+
+  /* ---- edges + travelling pulses ---- */
+  const SEG = 30, maxE = nodes.length;
+  const ePos = new Float32Array(maxE * SEG * 6), eCol = new Float32Array(maxE * SEG * 6);
+  const eGeo = new THREE.BufferGeometry();
+  eGeo.setAttribute('position', new THREE.BufferAttribute(ePos, 3).setUsage(THREE.DynamicDrawUsage));
+  eGeo.setAttribute('color', new THREE.BufferAttribute(eCol, 3).setUsage(THREE.DynamicDrawUsage));
+  const edges = new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  edges.frustumCulled = false; scene.add(edges);
+
+  const pPos = new Float32Array(maxE * 3), pCol = new Float32Array(maxE * 3);
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3).setUsage(THREE.DynamicDrawUsage));
+  pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3).setUsage(THREE.DynamicDrawUsage));
+  const pulses = new THREE.Points(pGeo, new THREE.PointsMaterial({ size: 0.42, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  pulses.frustumCulled = false; scene.add(pulses);
+
+  // Point on the parent→child link at t ∈ [0,1], interpolated in polar coordinates.
+  const curve = new Float32Array((SEG + 1) * 3);
+  function linkPoint(p, c, t, out, o) {
+    const ap = p.r > 0.01 ? p.a : c.a;
+    let d = (c.a - ap) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU;
+    const a = ap + d * t * t * (3 - 2 * t);
+    const m = (p.r + c.r) / 2, u = 1 - t;
+    const r = u * u * u * p.r + 3 * u * t * m + t * t * t * c.r;   // cubic Bézier (p.r, m, m, c.r)
+    const y = p.y + (c.y - p.y) * t + Math.sin(Math.PI * t) * 0.5;
+    out[o] = r * Math.cos(a); out[o + 1] = y; out[o + 2] = r * Math.sin(a);
+  }
+
+  function updateLinks(time) {
+    let e = 0, pc = 0;
+    for (const n of nodes) {
+      if (!n.shown || n === root || !n.parent.shown) continue;
+      const p = n.parent;
+      const k = THREE.MathUtils.clamp(n.s, 0, 1) * n.al * (0.4 + 0.6 * p.al);
+      if (k < 0.01) continue;
+      for (let i = 0; i <= SEG; i++) linkPoint(p, n, i / SEG, curve, i * 3);
+      const base = e * SEG * 6;
+      for (let i = 0; i < SEG; i++) {
+        const o = base + i * 6;
+        ePos.set(curve.subarray(i * 3, i * 3 + 6), o);
+        for (let j = 0; j < 2; j++) {
+          const t = (i + j) / SEG, f = k * (0.22 + 0.5 * t);
+          eCol[o + j * 3]     = (p.col.r + (n.col.r - p.col.r) * t) * f;
+          eCol[o + j * 3 + 1] = (p.col.g + (n.col.g - p.col.g) * t) * f;
+          eCol[o + j * 3 + 2] = (p.col.b + (n.col.b - p.col.b) * t) * f;
+        }
+      }
+      e++;
+      if (!reduceMotion) {
+        const t = (time * 0.24 + n.id * 0.618) % 1;
+        linkPoint(p, n, t, pPos, pc * 3);
+        const f = k * Math.sin(Math.PI * t) * 1.3;
+        pCol[pc * 3] = n.col.r * f; pCol[pc * 3 + 1] = n.col.g * f; pCol[pc * 3 + 2] = n.col.b * f;
+        pc++;
+      }
+    }
+    eGeo.setDrawRange(0, e * SEG * 2);
+    eGeo.attributes.position.needsUpdate = eGeo.attributes.color.needsUpdate = true;
+    pGeo.setDrawRange(0, pc);
+    pGeo.attributes.position.needsUpdate = pGeo.attributes.color.needsUpdate = true;
+  }
+
+  /* ---- per-frame node animation ---- */
+  const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+  const easeOutBack = t => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
+  const easeIn = t => t * t * t;
+  let hovered = null;
+
+  function stepNode(n, now, time, dt) {
+    let lift = 0;
+    const tw = n.tw;
+    if (tw) {
+      const t = DUR ? THREE.MathUtils.clamp((now - tw.t0) / DUR, 0, 1) : 1;
+      const e = easeInOut(t);
+      n.a = tw.a0 + (tw.a1 - tw.a0) * e;
+      n.r = tw.r0 + (tw.r1 - tw.r0) * e;
+      n.s = tw.s0 + (tw.s1 - tw.s0) * (tw.s1 >= tw.s0 ? easeOutBack(t) : easeIn(t));
+      lift = tw.arc * Math.sin(Math.PI * e);
+      if (t >= 1) {
+        n.tw = null;
+        if (n.hiding) { n.hiding = false; n.shown = false; n.obj.visible = false; }
+      }
+    }
+    const isFile = n.type === 'file';
+    const bob = reduceMotion ? 0 : Math.sin(time * 1.1 + n.id * 1.7) * (isFile ? 0.09 : 0.05);
+    n.y = (isFile ? 0.55 : 0) + lift + bob;
+    n.obj.position.set(n.r * Math.cos(n.a), n.y, n.r * Math.sin(n.a));
+
+    const damp = b => 1 - Math.pow(1 - b, dt * 60);
+    n.hs += ((n === hovered ? 1.2 : 1) - n.hs) * damp(0.2);
+    n.al += (n.alT - n.al) * damp(0.12);
+    n.obj.scale.setScalar(Math.max(1e-4, n.s * n.hs));
+
+    if (isFile) {
+      n.sprite.material.opacity = n.al;
+    } else {
+      n.core.material.opacity = n.al;
+      n.core.material.emissiveIntensity = (n === root ? 0.75 : 0.85) * (n === hovered ? 1.8 : 1);
+      n.shell.material.opacity = 0.3 * n.al;
+      n.halo.material.opacity = (n === root ? 0.22 : 0.2) * n.al;
+      n.shell.rotation.y += dt * (n.expanded ? 0.55 : 0.12);
+      n.shell.rotation.x += dt * 0.05;
+      n.ringO += ((n.expanded && n !== root ? 0.5 : n === root ? 0.3 : 0) * n.al - n.ringO) * damp(0.08);
+      n.ring.material.opacity = n.ringO;
+      n.ring.rotation.set(Math.PI / 2 + Math.sin(time * 0.7 + n.id) * 0.35, Math.cos(time * 0.5 + n.id) * 0.25, 0);
+      if (n.ring2) {
+        n.ring2.material.opacity = 0.16;
+        n.ring2.rotation.set(Math.PI / 2 + Math.cos(time * 0.4) * 0.5, Math.sin(time * 0.6) * 0.4, 0);
+      }
+      const lv = n.shown && n.s > 0.35;
+      n.label.visible = lv;
+      const op = Math.round(n.al * 20) / 20;
+      if (lv && n._op !== op) { n.label.element.style.opacity = op; n._op = op; }
+    }
+  }
+
+  /* ---- picking ---- */
+  const ray = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let pointerIn = false, pointerType = 'mouse', down = null, tapped = null;
+  const setPointer = e => {
+    pointer.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  };
+  function pick() {
+    ray.setFromCamera(pointer, camera);
+    const cands = pickables.filter(o => { const n = o.userData.node; return n.shown && !n.hiding && n.s > 0.5; });
+    const hit = ray.intersectObjects(cands, false)[0];
+    return hit ? hit.object.userData.node : null;
+  }
+  canvas.addEventListener('pointermove', e => { pointerIn = true; pointerType = e.pointerType; setPointer(e); });
+  canvas.addEventListener('pointerleave', () => { pointerIn = false; if (hovered) { hovered = null; canvas.style.cursor = ''; setHot(null); } });
+  canvas.addEventListener('pointerdown', e => { pointerType = e.pointerType; down = [e.clientX, e.clientY]; setPointer(e); });
+  canvas.addEventListener('click', e => {
+    if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;   // that was a drag
+    setPointer(e);
+    const n = pick();
+    if (!n) { hideDetail(); tapped = null; return; }
+    dismissHint();
+    if (n.type === 'dir') { toggle(n); if (pointerType !== 'mouse') showDetail(n); return; }
+    if (pointerType !== 'mouse' && tapped !== n) { tapped = n; showDetail(n); return; }  // touch: first tap previews
+    window.open(n.href, '_blank', 'noopener');
+  });
+  controls.addEventListener('start', () => { fitting = false; fitTarget = null; dismissHint(); });
+
+  /* ---- resize ---- */
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h); composer.setSize(w, h); labels.setSize(w, h);
+    camera.aspect = w / h;
+    const shift = narrow() ? 0 : (panel.offsetWidth + 16) / 2;   // centre the scene in the space right of the panel
+    if (shift) camera.setViewOffset(w, h, -shift, 0, w, h); else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', () => { resize(); relayout(); });
+  resize();
+
+  /* ---- loop ---- */
+  const clock = new THREE.Clock();
+  const dir = new THREE.Vector3();
+  renderer.setAnimationLoop(() => {
+    const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime, now = performance.now();
+    for (const n of nodes) if (n.obj && n.shown) stepNode(n, now, time, dt);
+    updateLinks(time);
+
+    for (const r of rings) {
+      const u = r.userData, k = 1 - Math.pow(0.92, dt * 60);
+      u.r += (u.rT - u.r) * k; u.o += (u.oT - u.o) * k;
+      r.scale.setScalar(Math.max(u.r, 0.01)); r.material.opacity = u.o; r.visible = u.o > 0.003;
+    }
+    floor.scale.setScalar(floor.scale.x + (floor.userData.s - floor.scale.x) * 0.04);
+    if (!reduceMotion) stars.rotation.y += dt * 0.004;
+
+    if (fitTarget) {
+      controls.target.lerp(fitTarget, 0.06);
+      if (controls.target.distanceTo(fitTarget) < 0.01) fitTarget = null;
+    }
+    if (fitting) {
+      dir.subVectors(camera.position, controls.target);
+      const d = dir.length(), nd = d + (fitDist - d) * (reduceMotion ? 1 : 0.045);
+      camera.position.copy(controls.target).add(dir.setLength(nd));
+      if (Math.abs(nd - fitDist) < 0.02 && !fitTarget) fitting = false;
+    }
+    const dist = camera.position.distanceTo(controls.target);
+    scene.fog.near = dist * 0.9; scene.fog.far = dist * 3.2;
+
+    if (pointerIn && pointerType === 'mouse') {
+      const n = pick();
+      if (n !== hovered) { hovered = n; canvas.style.cursor = n ? 'pointer' : ''; setHot(n); }
+    }
+    controls.autoRotate = autoRotate && !hovered && !hot;
+    controls.update();
+    composer.render();
+    labels.render(scene, camera);
+  });
+
+  relayout();
+
+  return {
+    relayout,
+    setHover(n) { hovered = n; },
+    setAutoRotate(on) { autoRotate = on; },
+    resetView() {
+      fitTarget = new THREE.Vector3();
+      const az = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+      const d = camera.position.distanceTo(controls.target);
+      camera.position.set(Math.sin(az) * Math.cos(ELEV) * d, Math.sin(ELEV) * d, Math.cos(az) * Math.cos(ELEV) * d).add(controls.target);
+      fitting = true;
+    },
+  };
+}
+
+initView()
+  .then(v => { view = v; })
+  .catch(err => {
+    console.warn('[publix] 3D view unavailable, showing list only:', err);
+    document.body.classList.add('flat');
+    panel.classList.remove('collapsed');
+  });
+</script>
+</body>
 </html>
