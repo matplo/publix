@@ -14,7 +14,9 @@ This script only rewrites three marked regions inside it:
 
   * <title>…</title>
   * <script type="application/json" id="publix-manifest"> … </script>   data for the 3D view
+    (also supports id="ib-manifest")
   * <!-- publix:static --> … <!-- /publix:static -->                    plain list (no-JS fallback)
+    (also supports index-browser:static markers)
 
 so the page's look can be edited freely and the script re-run whenever files change.
 Hidden files/folders (dot-names) and the index page itself are skipped; empty folders
@@ -49,9 +51,12 @@ DEFAULT_EXCLUDES = [".*", "__pycache__", "Thumbs.db", "desktop.ini"]
 TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.I | re.S)
 PAGE_TITLE_RE = re.compile(r"<title>.*?</title>", re.S)
 MANIFEST_RE = re.compile(
-    r'(<script type="application/json" id="publix-manifest">)(.*?)(</script>)', re.S
+    r'(<script type="application/json" id="(?:publix|ib)-manifest">)(.*?)(</script>)', re.S
 )
-STATIC_RE = re.compile(r"(<!-- publix:static -->)(.*?)(<!-- /publix:static -->)", re.S)
+STATIC_RE = re.compile(
+    r"(<!-- (?:publix|index-browser):static -->)(.*?)(<!-- /(?:publix|index-browser):static -->)",
+    re.S,
+)
 
 
 def iso_utc(ts: float) -> str:
@@ -202,7 +207,9 @@ def main() -> int:
 
     page = index.read_text(encoding="utf-8")
     if not MANIFEST_RE.search(page):
-        print(f'error: {index} has no <script type="application/json" id="publix-manifest"> block',
+        print(
+            f'error: {index} has no supported manifest block '
+            f'(<script type="application/json" id="publix-manifest"> or id="ib-manifest")',
               file=sys.stderr)
         return 1
     new = MANIFEST_RE.sub(lambda m: m.group(1) + data + m.group(3), page, count=1)
