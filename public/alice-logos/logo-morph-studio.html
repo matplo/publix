@@ -465,6 +465,58 @@ async function offerFile(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 30000);
   return 'Downloaded ' + name;
 }
+// Off-screen capture renders straight into a half-float target in linear light, reads it back,
+// averages 2×2 samples in linear space and encodes sRGB here. Capturing the on-screen canvas gave
+// blank and out-of-order frames, because the canvas image is only valid until the browser presents it.
+const HALF2LIN = (() => {
+  const t = new Float32Array(65536);
+  for (let h = 0; h < 65536; h++) {
+    const s = h & 0x8000 ? -1 : 1, ex = (h >> 10) & 31, f = h & 1023;
+    t[h] = ex === 0 ? s * Math.pow(2, -14) * (f / 1024) : ex === 31 ? (f ? 0 : s * Infinity) : s * Math.pow(2, ex - 15) * (1 + f / 1024);
+  }
+  return t;
+})();
+const LIN2SRGB = (() => {
+  const N = 4096, t = new Uint8Array(N + 1);
+  for (let i = 0; i <= N; i++) { const c = i / N; t[i] = Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)); }
+  return t;
+})();
+const enc8 = (v) => LIN2SRGB[v <= 0 ? 0 : v >= 1 ? 4096 : (v * 4096 + 0.5) | 0];
+const makeRT = (w, h) => new THREE.RenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: true });
+
+let _topDown = null;
+async function rowsTopDown() {                       // WebGPU returns rows top-down, WebGL bottom-up: check once
+  if (_topDown !== null) return _topDown;
+  const rt = makeRT(4, 4);
+  const sc = new THREE.Scene(); sc.background = new THREE.Color(0, 0, 0);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 1), new THREE.MeshBasicNodeMaterial({ color: 0xffffff }));
+  m.position.y = 0.5; sc.add(m);
+  renderer.setRenderTarget(rt);
+  renderer.render(sc, new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1));
+  renderer.setRenderTarget(null);
+  const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 4, 4);
+  rt.dispose(); m.geometry.dispose(); m.material.dispose();
+  return (_topDown = HALF2LIN[px[0]] > 0.5);
+}
+async function grabFrame(rt, W, H, ss, topDown, out) {
+  renderer.render(scene, cam);
+  const RW = W * ss, RH = H * ss;
+  const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, RW, RH);
+  const row = RW * 4, stride = RH > 1 ? (px.length - row) / (RH - 1) : row;   // WebGPU pads rows to 256 bytes
+  const n = 1 / (ss * ss);
+  for (let y = 0; y < H; y++) {
+    const o = y * W * 4;
+    for (let x = 0; x < W; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let sy = 0; sy < ss; sy++) {
+        const yy = y * ss + sy, base = (topDown ? yy : RH - 1 - yy) * stride + x * ss * 4;
+        for (let sx = 0; sx < ss; sx++) { const k = base + sx * 4; r += HALF2LIN[px[k]]; g += HALF2LIN[px[k + 1]]; b += HALF2LIN[px[k + 2]]; }
+      }
+      const q = o + x * 4; out[q] = enc8(r * n); out[q + 1] = enc8(g * n); out[q + 2] = enc8(b * n); out[q + 3] = 255;
+    }
+  }
+  return out;
+}
 async function exportVideo() {
   const st = $('xstatus'), bar = $('xprog'), btn = $('export');
   if (!('VideoEncoder' in window)) { st.textContent = 'This browser has no WebCodecs encoder. Use a current Chrome, Edge or Safari.'; return; }
@@ -481,18 +533,27 @@ async function exportVideo() {
   let encErr = null;
   const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => { encErr = e; } });
   enc.configure(cfg);
-  renderer.setPixelRatio(1); renderer.setSize(W, H, false); fit(W, H);
+  const maxTex = renderer.backend?.device?.limits?.maxTextureDimension2D || renderer.backend?.gl?.getParameter(renderer.backend.gl.MAX_TEXTURE_SIZE) || 8192;
+  const ss = Math.max(W, H) * 2 <= maxTex ? 2 : 1;
+  const rt = makeRT(W * ss, H * ss);
+  const buf = new Uint8Array(W * H * 4);
   try {
+    st.textContent = 'Preparing…';
+    const topDown = await rowsTopDown();
+    fit(W, H);
+    renderer.setRenderTarget(rt);
+    if (renderer.compileAsync) await renderer.compileAsync(scene, cam);
+    setP(0); await grabFrame(rt, W, H, ss, topDown, buf);      // warm-up frame, discarded
     for (let i = 0; i < total; i++) {
       if (encErr) throw encErr;
       const t = i / fps;
       setP(S.dur > 0 ? (t - h0) / S.dur : 1);
-      renderer.render(scene, cam);
-      const dev = renderer.backend?.device; if (dev) await dev.queue.onSubmittedWorkDone();
-      const vf = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      await grabFrame(rt, W, H, ss, topDown, buf);
+      const vf = new VideoFrame(buf, { format: 'RGBX', codedWidth: W, codedHeight: H,
+        timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
       enc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
       while (enc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 2));
-      if (i % 4 === 0) { bar.style.width = (100 * i / total).toFixed(1) + '%'; st.textContent = `Rendering frame ${i + 1} of ${total}…`; await new Promise((r) => setTimeout(r, 0)); }
+      if (i % 4 === 0) { bar.style.width = (100 * i / total).toFixed(1) + '%'; st.textContent = `Rendering frame ${i + 1} of ${total}…`; }
     }
     await enc.flush(); muxer.finalize();
     const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
@@ -500,10 +561,11 @@ async function exportVideo() {
     const name = `morph-${S.mode}-${W}x${H}-${fps}fps.mp4`;
     st.textContent = `${(blob.size / 1e6).toFixed(1)} MB, ${(total / fps).toFixed(1)} s. ` + await offerFile(blob, name);
   } catch (e) {
+    console.error(e);
     st.textContent = 'Export failed: ' + (e?.message || e);
   } finally {
+    renderer.setRenderTarget(null); rt.dispose();
     try { enc.close(); } catch (e) {}
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     resize(); setP(prevP); dir = prevDir; syncButtons();
     renderer.setAnimationLoop(tick); btn.disabled = false;
   }
@@ -573,7 +635,7 @@ function resize() {
   if (!w || !h) return;
   renderer.setSize(w, h, false); fit(w, h);
 }
-new ResizeObserver(() => { if (!$('export').disabled) resize(); }).observe(stage);
+new ResizeObserver(() => resize()).observe(stage);
 
 /* ---------- boot ---------- */
 (async () => {
