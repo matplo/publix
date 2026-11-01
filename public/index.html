@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>publix</title>
+    <style>
+      :root { --bg: #f7f8fb; --ink: #1a2433; --muted: #5d6b82; --line: #e3e7ef; --link: #2a5bd7; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #12161d; --ink: #e6e9ef; --muted: #8b96a8; --line: #252c38; --link: #7ea2ff; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink);
+             font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      main { width: min(760px, calc(100% - 32px)); margin: 48px auto; }
+      h1 { margin: 0 0 4px; font-size: 1.6rem; letter-spacing: -0.02em; }
+      p.sub { margin: 0 0 32px; color: var(--muted); }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { padding: 12px 0; border-top: 1px solid var(--line); }
+      li:last-child { border-bottom: 1px solid var(--line); }
+      a { color: var(--link); text-decoration: none; font-weight: 600; }
+      a:hover { text-decoration: underline; }
+      .desc { color: var(--muted); font-size: 0.92rem; }
+      .empty { color: var(--muted); font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>publix</h1>
+      <p class="sub">Public artifacts.</p>
+      <ul>
+        <!-- <li><a href="example.html">example</a> <span class="desc">— short description</span></li> -->
+        <li class="empty">Nothing here yet.</li>
+      </ul>
+    </main>
+  </body>
+</html>
